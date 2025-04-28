@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sakura Focus Timer</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #f9d8df, #d8b4fe);
+      font-family: 'Helvetica Neue', sans-serif;
+      color: #6b21a8;
+      overflow: hidden;
+      position: relative;
+    }
+    h1 {
+      margin-bottom: 10px;
+      font-size: 2.2em;
+    }
+    .timer {
+      font-size: 2.5em;
+      margin-top: 20px;
+      margin-bottom: 10px;
+    }
+    button {
+      margin: 10px;
+      padding: 12px 24px;
+      font-size: 1.1em;
+      background-color: #d8b4fe;
+      color: #6b21a8;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      transition: background-color 0.3s, transform 0.2s;
+    }
+    button:hover {
+      background-color: #c084fc;
+      transform: scale(1.05);
+    }
+    .circle-container {
+      position: relative;
+      width: 200px;
+      height: 200px;
+    }
+    .circle {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: conic-gradient(
+        #ec4899 0%,
+        #f3e8ff 0%
+      );
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .circle-text {
+      position: absolute;
+      font-size: 1.5em;
+      font-weight: bold;
+      color: #6b21a8;
+    }
+    #reportTab {
+      display: none;
+      background-color: #f3e8ff;
+      border-radius: 10px;
+      padding: 20px;
+      width: 80%;
+      margin-top: 20px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    }
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .report-table th, .report-table td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    .delete-btn {
+      background-color: #ec4899;
+      color: white;
+      padding: 3px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      font-size: 0.8em;
+    }
+    .delete-btn:hover {
+      background-color: #f3e8ff;
+      color: #ec4899;
+    }
+  </style>
+</head>
+<body>
+
+  <h1 id="status">Ready</h1>
+  <div class="circle-container">
+    <div class="circle" id="circle">
+      <div class="circle-text" id="circleText">00:00</div>
+    </div>
+  </div>
+
+  <button id="workBtn">Start Work</button>
+  <button id="breakBtn" style="display:none;">Start Break</button>
+  <button id="continueBtn" style="display:none;">Continue Work</button>
+  <button id="reportBtn">View Report</button>
+
+  <div id="reportTab">
+    <h2>Daily Report</h2>
+    <p><strong>Total Work Time: </strong><span id="totalWorkTime">0 minutes</span></p>
+    <p><strong>Total Break Time: </strong><span id="totalBreakTime">0 minutes</span></p>
+    <table class="report-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Type</th>
+          <th>Start Time</th>
+          <th>End Time</th>
+          <th>Duration (Minutes)</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="reportBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    let isWorking = false;
+    let isOnBreak = false;
+    let workStartTime = 0;
+    let workElapsedTime = 0;
+    let breakDuration = 0;
+    let breakEndTime = 0;
+    let timerInterval = null;
+    let workBreakRecords = JSON.parse(localStorage.getItem('workBreakRecords')) || [];
+
+    const workBtn = document.getElementById('workBtn');
+    const breakBtn = document.getElementById('breakBtn');
+    const continueBtn = document.getElementById('continueBtn');
+    const reportBtn = document.getElementById('reportBtn');
+    const reportTab = document.getElementById('reportTab');
+    const reportBody = document.getElementById('reportBody');
+    const statusDisplay = document.getElementById('status');
+    const circle = document.getElementById('circle');
+    const circleText = document.getElementById('circleText');
+    const totalWorkTimeDisplay = document.getElementById('totalWorkTime');
+    const totalBreakTimeDisplay = document.getElementById('totalBreakTime');
+
+    function formatTime(ms) {
+      const totalSeconds = Math.ceil(ms / 1000);
+      const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+      const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+      return `${minutes}:${seconds}`;
+    }
+
+    function updateCircle(progress) {
+      circle.style.background = `conic-gradient(
+        ${isWorking ? '#ec4899' : '#a855f7'} ${progress * 360}deg,
+        #f3e8ff ${progress * 360}deg
+      )`;
+    }
+
+    function startWork() {
+      isWorking = true;
+      isOnBreak = false;
+      statusDisplay.textContent = "Working...";
+      workBtn.textContent = "Finish Work";
+      workBtn.style.display = "inline-block";
+      breakBtn.style.display = "none";
+      continueBtn.style.display = "none";
+      workStartTime = Date.now();
+      timerInterval = setInterval(updateTimer, 1000);
+    }
+
+    function finishWork() {
+      clearInterval(timerInterval);
+      workElapsedTime = Date.now() - workStartTime;
+      breakDuration = workElapsedTime / 5;
+      isWorking = false;
+      statusDisplay.textContent = "Work Finished! Ready for Break.";
+      workBtn.style.display = "none";
+      breakBtn.style.display = "inline-block";
+      continueBtn.style.display = "none";
+      circleText.textContent = "00:00";
+      updateCircle(0);
+      // Store work record
+      workBreakRecords.push({ type: 'Work', startTime: new Date(workStartTime).toLocaleString(), endTime: new Date(), duration: Math.floor(workElapsedTime / 60000) });
+      localStorage.setItem('workBreakRecords', JSON.stringify(workBreakRecords));
+    }
+
+    function startBreak() {
+      isOnBreak = true;
+      statusDisplay.textContent = "On Break!";
+      breakBtn.textContent = "Finish Break";
+      workBtn.style.display = "none";
+      continueBtn.style.display = "none";
+      breakEndTime = Date.now() + breakDuration;
+      timerInterval = setInterval(updateTimer, 1000);
+    }
+
+    function finishBreak() {
+      clearInterval(timerInterval);
+      isOnBreak = false;
+      statusDisplay.textContent = "Break Finished! Ready to Work.";
+      breakBtn.style.display = "none";
+      continueBtn.style.display = "inline-block";
+      circleText.textContent = "00:00";
+      updateCircle(0);
+      // Store break record
+      workBreakRecords.push({ type: 'Break', startTime: new Date(Date.now() - breakDuration).toLocaleString(), endTime: new Date(), duration: Math.floor(breakDuration / 60000) });
+      localStorage.setItem('workBreakRecords', JSON.stringify(workBreakRecords));
+    }
+
+    function updateTimer() {
+      const now = Date.now();
+      if (isWorking) {
+        const elapsed = now - workStartTime;
+        circleText.textContent = formatTime(elapsed);
+        updateCircle(0); // 不顯示進度環
+      } else if (isOnBreak) {
+        const remaining = breakEndTime - now;
+        if (remaining <= 0) {
+          clearInterval(timerInterval);
+          finishBreak();
+          return;
+        }
+        circleText.textContent = formatTime(remaining);
+        const progress = 1 - (remaining / breakDuration);
+        updateCircle(progress);
+      }
+    }
+
+    function showReport() {
+      reportTab.style.display = 'block';
+      reportBody.innerHTML = '';
+      let totalWorkTime = 0;
+      let totalBreakTime = 0;
+
+      workBreakRecords.forEach((record, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${index + 1}</td>
+          <td>${record.type}</td>
+          <td>${record.startTime}</td>
+          <td>${record.endTime}</td>
+          <td>${record.duration}</td>
+          <td><button class="delete-btn" onclick="deleteRecord(${index})">Delete</button></td>
+        `;
+        reportBody.appendChild(row);
+        
+        if (record.type === 'Work') {
+          totalWorkTime += record.duration;
+        } else if (record.type === 'Break') {
+          totalBreakTime += record.duration;
+        }
+      });
+
+      // Display total time
+      totalWorkTimeDisplay.textContent = `${totalWorkTime} minutes`;
+      totalBreakTimeDisplay.textContent = `${totalBreakTime} minutes`;
+    }
+
+    function deleteRecord(index) {
+      workBreakRecords.splice(index, 1);
+      localStorage.setItem('workBreakRecords', JSON.stringify(workBreakRecords));
+      showReport();
+    }
+
+    workBtn.addEventListener('click', () => isWorking ? finishWork() : startWork());
+    breakBtn.addEventListener('click', startBreak);
+    continueBtn.addEventListener('click', startWork);
+    reportBtn.addEventListener('click', showReport);
+  </script>
+</body>
+</html>
+
+
